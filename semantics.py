@@ -1,11 +1,11 @@
-from lex import tokens, find_line_number
+from lex import tokens
 
 
-def Semantics_LogError(word, filename):
+def Semantics_LogError(logerror, filename):
     print("Writing to Error File...")
 
     with open(filename, "a") as file: 
-        file.write(f"Invalid Token '{word}' on line {find_line_number(filename, word)}.\n") 
+        file.write(logerror + "\n") 
     
     print("\n")
 
@@ -13,7 +13,6 @@ def AnalyseSemantics(tokens):
     # Initialize symbol table and scope variables
     symbol_table = []
     current_scope = None
-
     # Define literal types
     literal_types = set(['number', 'string'])
 
@@ -23,14 +22,14 @@ def AnalyseSemantics(tokens):
         #print(token)
         if token[0] == 'keyword':
             # If keyword is a scope-defining keyword, set the current scope
-            if token[1] in ['def', 'while', 'if', 'else']:
+            if token[1] in ['def', 'while', 'if', 'else', 'int', 'double']:
                 current_scope = token[1]
+                print(current_scope)
             # Add keyword to symbol table
             symbol_table.append([i+1, token[1], 'Keyword', current_scope])
         elif token[0] == 'id':
             # Check if identifier is a variable or function
             if i < len(tokens) - 2  and tokens[i+1][1] == '(':
-                #lookup(token[1], current_scope, symbol_table)
                 # Extract function name and parameter types
                 function_name = token[1]
                 param_types = []
@@ -52,31 +51,22 @@ def AnalyseSemantics(tokens):
                 # Add function to symbol table with return type and parameter types
                 symbol_table.append([i+1, function_name, 'Function', (return_type, param_types)])
                 
-            if token[1] == '=':
-                # Check if the variable exists in the current scope or any parent scopes
-                variable_name = symbol_table[i-1][1]
-                found = False
-                for j in range(i-1, -1, -1):
-                    if symbol_table[j][1] == variable_name:
-                        found = True
-                        break
-                    elif symbol_table[j][2] in ['Function', 'Keyword']:
-                        break
-                if not found:
-                    # Log an error and enter panic mode
-                    print(f"Error at line {token[0]}: Undeclared variable '{variable_name}'")
-                    Semantics_LogError(variable_name, file_name_4)
-                    # Perform panic mode
-                    while token[1] != ';':
-                        i += 1
-                        token = tokens[i]
-                    continue
-        
+            elif token[1] == '=':
                 # Check if types match for assignment
-                if symbol_table[j][3] != symbol_table[i+1][3]:
-                    print(f"Type mismatch error at line {token[0]}: {symbol_table[j][1]} of type {symbol_table[j][3]} cannot be assigned to {symbol_table[i+1][1]} of type {symbol_table[i+1][3]}")
+                if symbol_table[i-1][3] != symbol_table[i+1][3]:
+                    logerror = (f"Type mismatch error at line {token[0]}: {symbol_table[i-1][1]} of type {symbol_table[i-1][3]} cannot be assigned to {symbol_table[i+1][1]} of type {symbol_table[i+1][3]}")
+                    print(logerror)
+                    Semantics_LogError(logerror, file_name_4)
 
-            if token[1] == 'return':
+            elif token[0] in ['comp', 'bool']:  # Comparison operators and boolean operators
+                # Check if types match for comparison
+                if symbol_table[i-1][3] != symbol_table[i+1][3]:
+                    logerror = (f"Type mismatch error at line {token[0]}: {symbol_table[i-1][1]} of type {symbol_table[i-1][3]} cannot be compared to {symbol_table[i+1][1]} of type {symbol_table[i+1][3]}")
+                    print(logerror)
+                    Semantics_LogError(logerror, file_name_4)
+
+
+            elif token[1] == 'return':
                 # Get the expected return type of the function
                 expected_return_type = symbol_table[current_scope][3][0]
 
@@ -85,9 +75,11 @@ def AnalyseSemantics(tokens):
 
                 # Check if the types match
                 if expected_return_type != actual_return_type:
-                    print(f"Return type mismatch error at line {token[0]}: Expected {expected_return_type}, but got {actual_return_type}")
+                    logerror = (f"Return type mismatch error at line {token[0]}: Expected {expected_return_type}, but got {actual_return_type}")
+                    print(logerror)
+                    Semantics_LogError(logerror, file_name_4)
 
-            if token[1] in ['od', 'fed', 'fi']:
+            elif token[1] in ['od', 'fed', 'fi']:
                 # Remove the symbol table for the current scope
                 symbol_table = symbol_table[:current_scope]
 
@@ -95,9 +87,24 @@ def AnalyseSemantics(tokens):
                 current_scope = symbol_table[-1][3][1]
 
             else:
-                # If identifier is a variable, add to symbol table with type and scope from last scope-defining keyword
-                symbol_table.append([i+1, token[1], 'Variable', current_scope])
-                
+                variable_name = token[1]
+                variable_type = current_scope  # Initialize variable type with current scope
+                #print(variable_type)
+                for entry in reversed(symbol_table):
+                    if entry[1] == variable_name and entry[2] == 'Variable':
+                        #print(entry[1])
+                        #print(entry[2])
+                        if entry[3] != variable_type:
+                            #print(entry[3])
+                            logerror = (f"Type mismatch error at line {i+1} {token[0]}: {variable_name} was previously declared with type {entry[3]}, cannot declare again with type {variable_type}")
+                            print(logerror)
+                            Semantics_LogError(logerror, file_name_4)
+                        break
+                    elif entry[2] == 'Keyword':
+                        variable_type = entry[3]  # Update variable type with scope from last scope-defining keyword
+
+                symbol_table.append([i+1, variable_name, 'Variable', current_scope])
+              
         elif token[0] in literal_types:
             # Add literal to symbol table with type
             symbol_table.append([i+1, token[1], 'Literal', token[0]])
@@ -128,3 +135,4 @@ print("\n")
 print("Semantics Analysis")
 print("\n")
 AnalyseSemantics(tokens)
+
